@@ -1,6 +1,7 @@
 package il.co.smartpocket
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.BatteryManager
@@ -50,6 +51,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.Period
+import java.time.Duration
+import java.time.ZoneId
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import kotlin.math.*
 
 private val Brand = Color(0xFF315C9B)
@@ -117,7 +127,7 @@ passcheck|בודק סיסמה|בדיקת חוזק ואורך|אבטחה|🛡️|
 uuid|מחולל UUID|מזהה אקראי ייחודי|אבטחה|🆔|secure
 random|מספר אקראי|הגרלה בטווח שתבחר|אבטחה|🎲|random
 dice|הטלת קוביות|מספר קוביות ומספר צדדים|אבטחה|🎲|random
-coin|הטלת מטבע|עץ או פלי|אבטחה|🪙|random
+coin|הטלת מטבע|עץ או פלי|אבטחה|🪙|coin
 passphrase|צירוף מילים|צירוף אקראי שקל לזכור|אבטחה|🗝️|secure
 datediff|הפרש תאריכים|מספר הימים בין תאריכים|זמן ותכנון|🗓️|date
 adddays|הוספת ימים|חישוב תאריך קדימה או אחורה|זמן ותכנון|📆|date
@@ -131,7 +141,7 @@ pomodoro|פומודורו|מחזורי עבודה והפסקה|זמן ותכנו
 notes|פתקים|שמירת פתקים במכשיר|זמן ותכנון|📒|notes
 checklist|רשימת משימות|רשימה אישית שנשמרת|זמן ותכנון|✅|notes
 tally|מונה לחיצות|מונה פלוס ומינוס|זמן ותכנון|🔢|counter
-metronome|מטרונום|טיימר קצב לפי BPM|זמן ותכנון|🎵|timer
+metronome|מטרונום|פעימות בקצב BPM לבחירתך|זמן ותכנון|🎵|metronome
 qr|יוצר QR|יצירת קוד QR מתוכן|מכשיר ויצירה|▦|qr
 barcode|יוצר ברקוד|יצירת ברקוד Code 128|מכשיר ויצירה|▥|qr
 device|מידע על המכשיר|דגם, יצרן וגרסת Android|מכשיר ויצירה|📲|device
@@ -142,9 +152,21 @@ compass|מצפן|כיוון לפי חיישני המכשיר|מכשיר ויצי
 level|פלס דיגיטלי|זווית לפי מד תאוצה|מכשיר ויצירה|📐|sensor
 color|ממיר RGB ל-HEX|המרת רכיבי צבע לקוד HEX|מכשיר ויצירה|🎨|misc
 aspect|יחס תמונה|חישוב יחס רוחב וגובה|מכשיר ויצירה|🖼️|misc
-dp|ממיר DP ל-PX|המרת יחידות תצוגה|המרות|📲|convert
+dp|ממיר DP ל-PX|המרת DP לפיקסלים לפי DPI|המרות|📲|convert
 romanread|בדיקת מספר רומי|המרת ספרות רומיות למספר|מתמטיקה|Ⅳ|math
 countdown|ספירה לאחור|טיימר מהיר עם איפוס|זמן ותכנון|⌛|timer
+factorial|עצרת מספר|חישוב עצרת למספר שלם עד 20|מתמטיקה|❗|math
+primecheck|בדיקת מספר ראשוני|בדיקה אם מספר הוא ראשוני|מתמטיקה|🔢|math
+gcdlcm|מחלק משותף ומכפלה משותפת|חישוב GCD ו-LCM לשני מספרים|מתמטיקה|➗|math
+rounding|עיגול מספר|עיגול למספר ספרות אחרי הנקודה|מתמטיקה|🎯|math
+percentchange|שינוי באחוזים|חישוב עלייה או ירידה בין שני ערכים|מתמטיקה|📉|math
+agecalc|מחשבון גיל|חישוב גיל לפי תאריך לידה|זמן ותכנון|🎂|date
+workhours|חישוב משך זמן|חישוב שעות בין שעת התחלה לסיום|זמן ותכנון|🕒|date
+fuel|ממיר צריכת דלק|ליטר ל-100 ק״מ, ק״מ לליטר ו-MPG|המרות|🚗|convert
+hexrgb|HEX ל-RGB|פירוק קוד צבע לרכיבי RGB|מכשיר ויצירה|🎨|misc
+rot13|קידוד ROT13|הצפנה ופענוח ROT13 לטקסט|טקסט|🔁|text
+htmlencode|קידוד HTML|המרת תווים מיוחדים לישויות HTML|טקסט|🌐|text
+emailcheck|בדיקת כתובת דוא״ל|בדיקת מבנה כתובת ללא חיבור לרשת|אבטחה|✉️|secure
 """
 private val allTools = rawTools.trim().lines().map { line ->
     val p = line.split("|")
@@ -203,8 +225,20 @@ private fun SmartPocketApp() {
                         Surface(color=Color(0xFF244C83),shape=RoundedCornerShape(24.dp),modifier=Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                                 Text("הכוח שלך. בכיס שלך.",color=Color.White,fontSize=24.sp,fontWeight=FontWeight.Bold)
-                                Text("יותר מ-70 כלים שימושיים. בלי חשבון, בלי שרת ובלי רשת.",color=Color.White.copy(alpha=.88f))
+                                Text(allTools.size.toString()+" כלים שימושיים. בלי חשבון, בלי שרת ובלי רשת.",color=Color.White.copy(alpha=.88f))
                                 Text("✓ אופליין מלא     ✓ נתונים מקומיים",color=Color.White,style=MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text("גישה מהירה",color=Ink,fontWeight=FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf("calculator","notes","qr","password").mapNotNull { id -> allTools.firstOrNull { it.id==id } }.forEach { quick ->
+                                Surface(color=Color.White,shape=RoundedCornerShape(14.dp),modifier=Modifier.clickable { selected=quick }) {
+                                    Row(Modifier.padding(horizontal=12.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp)) {
+                                        Text(quick.icon,fontSize=19.sp)
+                                        Text(quick.title,color=Ink,fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.labelMedium)
+                                    }
+                                }
                             }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -225,7 +259,7 @@ private fun SmartPocketApp() {
                         verticalArrangement=Arrangement.spacedBy(10.dp)
                     ) {
                         items(visible,key={it.id}) { tool ->
-                            Surface(modifier=Modifier.fillMaxWidth().height(132.dp).clickable{selected=tool},shape=RoundedCornerShape(18.dp),color=Color.White,shadowElevation=1.dp) {
+                            Surface(modifier=Modifier.fillMaxWidth().height(144.dp).clickable{selected=tool},shape=RoundedCornerShape(18.dp),color=Color.White,shadowElevation=1.dp) {
                                 Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
                                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                                         Text(tool.icon,fontSize=24.sp)
@@ -234,6 +268,7 @@ private fun SmartPocketApp() {
                                     }
                                     Text(tool.title,color=Ink,fontWeight=FontWeight.Bold,maxLines=1,overflow=TextOverflow.Ellipsis)
                                     Text(tool.desc,color=Muted,style=MaterialTheme.typography.labelSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
+                                    Text(tool.cat,color=Brand.copy(alpha=.85f),style=MaterialTheme.typography.labelSmall)
                                 }
                             }
                         }
@@ -249,7 +284,7 @@ private fun SmartPocketApp() {
 private fun PocketToolScreen(tool:PocketTool,favorite:Boolean,onFavorite:()->Unit,onBack:()->Unit) {
     val context=LocalContext.current
     val prefs=remember { context.getSharedPreferences("smart_pocket",Context.MODE_PRIVATE) }
-    var input by remember(tool.id) { mutableStateOf(if(tool.mode=="notes")prefs.getString("note_"+tool.id,"")?:"" else "") }
+    var input by remember(tool.id) { mutableStateOf(when { tool.mode=="notes" -> prefs.getString("note_"+tool.id,"")?:""; tool.mode=="metronome" -> "120"; tool.id=="password" -> "20"; tool.id=="passphrase" -> "4"; tool.id=="timer" -> "5"; tool.id=="pomodoro" -> "25"; tool.id=="countdown" -> "1"; tool.id=="dice" -> "1"; tool.id=="random" -> "0"; else -> "" }) }
     var second by remember(tool.id) { mutableStateOf("") }
     var result by remember(tool.id) { mutableStateOf("") }
     var qr by remember(tool.id) { mutableStateOf<Bitmap?>(null) }
@@ -257,8 +292,16 @@ private fun PocketToolScreen(tool:PocketTool,favorite:Boolean,onFavorite:()->Uni
     var elapsed by remember(tool.id) { mutableLongStateOf(0L) }
     var tally by remember(tool.id) { mutableIntStateOf(0) }
     var sensorValue by remember(tool.id) { mutableFloatStateOf(0f) }
+    val timerTargetSeconds=if(tool.id=="stopwatch") Long.MAX_VALUE else (input.toLongOrNull()?:1L).coerceIn(1L,1440L)*60L
 
-    if(tool.mode=="timer" && running) LaunchedEffect(running,tool.id) { while(running){kotlinx.coroutines.delay(1000);elapsed++} }
+    if(tool.mode=="timer" && running) LaunchedEffect(running,tool.id,timerTargetSeconds) {
+        while(running && (tool.id=="stopwatch" || elapsed<timerTargetSeconds)) { kotlinx.coroutines.delay(1000); elapsed++ }
+        if(tool.id!="stopwatch" && elapsed>=timerTargetSeconds) { running=false; android.widget.Toast.makeText(context,"הזמן הסתיים",android.widget.Toast.LENGTH_LONG).show() }
+    }
+    if(tool.mode=="metronome" && running) LaunchedEffect(running,tool.id,input) {
+        val bpm=(input.toIntOrNull()?:120).coerceIn(30,300)
+        while(running) { kotlinx.coroutines.delay((60000L/bpm).coerceAtLeast(1L)); elapsed++ }
+    }
     if(tool.mode=="sensor") DisposableEffect(tool.id) {
         val manager=context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor=manager.getDefaultSensor(if(tool.id=="compass")Sensor.TYPE_ROTATION_VECTOR else Sensor.TYPE_ACCELEROMETER)
@@ -294,11 +337,10 @@ private fun PocketToolScreen(tool:PocketTool,favorite:Boolean,onFavorite:()->Uni
             }
             when(tool.mode) {
                 "timer" -> {
-                    val target=if(tool.id=="stopwatch")Long.MAX_VALUE else (input.toLongOrNull()?:1L)*60L
-                    val remaining=if(tool.id=="stopwatch")elapsed else (target-elapsed).coerceAtLeast(0)
+                    val remaining=if(tool.id=="stopwatch")elapsed else (timerTargetSeconds-elapsed).coerceAtLeast(0)
                     Text(clock(remaining),modifier=Modifier.fillMaxWidth(),fontSize=44.sp,fontWeight=FontWeight.Bold,color=Ink,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
                     if(tool.id!="stopwatch")OutlinedTextField(value=input,onValueChange={input=it.filter(Char::isDigit);elapsed=0;running=false},label={Text("משך בדקות")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth())
-                    if(tool.id=="pomodoro")Text("הזן 25 דקות לעבודה או 5 דקות להפסקה.",color=Muted)
+                    if(tool.id=="pomodoro")Text("טיימר עבודה של 25 דקות. בסיום אפשר לאפס ולהפעיל הפסקה של 5 דקות.",color=Muted)
                     Row(horizontalArrangement=Arrangement.spacedBy(10.dp),modifier=Modifier.fillMaxWidth()) {
                         Button(onClick={running=!running},modifier=Modifier.weight(1f),enabled=tool.id=="stopwatch"||remaining>0){Text(if(running)"השהה" else "התחל")}
                         OutlinedButton(onClick={running=false;elapsed=0},modifier=Modifier.weight(1f)){Text("איפוס")}
@@ -317,8 +359,21 @@ private fun PocketToolScreen(tool:PocketTool,favorite:Boolean,onFavorite:()->Uni
                     Text("הנתון מגיע מחיישני Android המקומיים.",color=Muted)
                 }
                 "notes" -> {
-                    OutlinedTextField(value=input,onValueChange={input=it;prefs.edit().putString("note_"+tool.id,it).apply()},modifier=Modifier.fillMaxWidth().heightIn(min=200.dp),label={Text(if(tool.id=="checklist")"משימות – שורה לכל פריט" else "כתוב פתק")},minLines=7)
+                    if(tool.id=="checklist") ChecklistEditor(prefs)
+                    else OutlinedTextField(value=input,onValueChange={input=it;prefs.edit().putString("note_"+tool.id,it).apply()},modifier=Modifier.fillMaxWidth().heightIn(min=200.dp),label={Text("כתוב פתק")},minLines=7)
                     Text("נשמר אוטומטית במכשיר.",color=Color(0xFF16856B))
+                }
+                "metronome" -> {
+                    val bpm=(input.toIntOrNull()?:120).coerceIn(30,300)
+                    OutlinedTextField(value=input,onValueChange={input=it.filter(Char::isDigit).take(3);running=false;elapsed=0},modifier=Modifier.fillMaxWidth(),label={Text("קצב BPM (30–300)")},keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),singleLine=true)
+                    Text(bpm.toString()+" פעימות בדקה",modifier=Modifier.fillMaxWidth(),fontSize=32.sp,fontWeight=FontWeight.Bold,color=Brand,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                    Text("פעימות שנספרו: "+elapsed,modifier=Modifier.fillMaxWidth(),color=Muted,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+                    Button(onClick={running=!running},modifier=Modifier.fillMaxWidth(),enabled=bpm in 30..300){Text(if(running)"עצור" else "הפעל מטרונום")}
+                    OutlinedButton(onClick={running=false;elapsed=0},modifier=Modifier.fillMaxWidth()){Text("איפוס")}
+                }
+                "coin" -> {
+                    Button(onClick={result=execute(tool,"coin","",context)},modifier=Modifier.fillMaxWidth()) { Text("הטל מטבע") }
+                    if(result.isNotBlank()) ResultCard(result){copyText(context,result)}
                 }
                 "device" -> {
                     val info=when(tool.id) {
@@ -355,6 +410,42 @@ private fun PocketToolScreen(tool:PocketTool,favorite:Boolean,onFavorite:()->Uni
     }
 }
 
+private data class ChecklistEntry(val done:Boolean,val text:String)
+
+@Composable
+private fun ChecklistEditor(prefs:SharedPreferences) {
+    var entries by remember { mutableStateOf(loadChecklist(prefs)) }
+    var draft by remember { mutableStateOf("") }
+    fun save(next:List<ChecklistEntry>) {
+        entries=next
+        val array=org.json.JSONArray()
+        next.forEach { item -> array.put(org.json.JSONObject().put("done",item.done).put("text",item.text)) }
+        prefs.edit().putString("checklist_items",array.toString()).apply()
+    }
+    Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value=draft,onValueChange={draft=it},modifier=Modifier.weight(1f),label={Text("משימה חדשה")},singleLine=true)
+            Button(onClick={if(draft.isNotBlank()){save(entries+ChecklistEntry(false,draft.trim()));draft=""}},enabled=draft.isNotBlank()){Text("הוסף")}
+        }
+        if(entries.isEmpty()) Text("עדיין אין משימות. הוסף את המשימה הראשונה.",color=Muted)
+        entries.forEachIndexed { index,item ->
+            Surface(color=Color.White,shape=RoundedCornerShape(12.dp)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Checkbox(checked=item.done,onCheckedChange={checked->save(entries.toMutableList().also{it[index]=item.copy(done=checked)})})
+                    Text(item.text,modifier=Modifier.weight(1f),color=if(item.done)Muted else Ink)
+                    TextButton(onClick={save(entries.filterIndexed{idx,_->idx!=index})}){Text("מחק")}
+                }
+            }
+        }
+        Text(entries.count{it.done}.toString()+" מתוך "+entries.size+" הושלמו",color=Muted,style=MaterialTheme.typography.labelMedium)
+    }
+}
+
+private fun loadChecklist(prefs:SharedPreferences):List<ChecklistEntry> = runCatching {
+    val array=org.json.JSONArray(prefs.getString("checklist_items","[]")?:"[]")
+    (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { ChecklistEntry(it.optBoolean("done",false),it.optString("text")) } }
+}.getOrDefault(emptyList())
+
 @Composable
 private fun ResultCard(value:String,onCopy:()->Unit) {
     Surface(color=Color.White,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {
@@ -365,17 +456,17 @@ private fun ResultCard(value:String,onCopy:()->Unit) {
         }
     }
 }
-private fun secondNeeded(t:PocketTool)=t.id in setOf("percent","discount","vat","tip","split","ratio","compare","datediff","adddays","random","dice","pixels","dp")
+private fun secondNeeded(t:PocketTool)=t.id in setOf("percent","discount","vat","tip","split","ratio","compare","datediff","adddays","random","dice","pixels","dp","gcdlcm","rounding","percentchange","workhours")
 private fun inputLabel(t:PocketTool)=when(t.id) {
-    "calculator"->"ביטוי מתמטי";"fraction"->"שבר, למשל 3/4";"average","median","stdev","minmax"->"מספרים מופרדים בפסיקים"
-    "datediff","weekday","yearday","adddays"->"תאריך YYYY-MM-DD";"leap"->"שנה";"ratio"->"שלושה ערכים a,b,c"
+    "calculator"->"ביטוי מתמטי";"pixels"->"ערך בפיקסלים";"dp"->"ערך ב-DP";"fraction"->"שבר, למשל 3/4";"average","median","stdev","minmax"->"מספרים מופרדים בפסיקים"
+    "datediff","weekday","yearday","adddays"->"תאריך YYYY-MM-DD";"agecalc"->"תאריך לידה YYYY-MM-DD";"leap"->"שנה";"ratio"->"ערכים a,b (לדוגמה 4,10)";"factorial"->"מספר שלם בין 0 ל-20";"primecheck"->"מספר שלם";"rounding"->"מספר לעיגול";"percentchange"->"ערך קודם";"workhours"->"שעת התחלה HH:mm";"fuel"->"ליטר ל-100 ק״מ";"hexrgb"->"קוד צבע #RRGGBB";"emailcheck"->"כתובת דוא״ל";"gcdlcm"->"מספר ראשון"
     "random","dice"->"גבול תחתון או מספר קוביות";"numberbase","roman","romanread"->"מספר";"color"->"ערכי RGB, לדוגמה 255,120,20";"aspect"->"רוחבxגובה";else->"הזן טקסט או מספר"
 }
 private fun inputHint(t:PocketTool)=when(t.id) {
-    "calculator"->"(12+8)*3/2";"average","median","stdev","minmax"->"12, 8, 15, 20";"datediff","weekday","yearday","adddays"->"2026-11-08";"fraction"->"7/8";"ratio"->"4,10,8";"aspect"->"1920x1080";else->"כתוב או הדבק כאן..."
+    "calculator"->"(12+8)*3/2";"average","median","stdev","minmax"->"12, 8, 15, 20";"datediff","weekday","yearday","adddays","agecalc"->"2026-11-08";"fraction"->"7/8";"ratio"->"4,10";"factorial"->"5";"primecheck"->"97";"gcdlcm"->"12";"rounding"->"3.141592";"percentchange"->"100";"workhours"->"09:00";"fuel"->"7.5";"hexrgb"->"#315C9B";"emailcheck"->"name@example.com";"aspect"->"1920x1080";else->"כתוב או הדבק כאן..."
 }
 private fun secondLabel(t:PocketTool)=when(t.id) {
-    "percent"->"אחוז";"discount","vat","tip"->"אחוז";"split"->"מספר אנשים";"compare"->"טקסט שני";"datediff"->"תאריך שני YYYY-MM-DD";"adddays"->"מספר ימים להוספה";"random"->"גבול עליון";"dice"->"מספר צדדים";"pixels","dp"->"DPI";else->"ערך שני"
+    "percent"->"אחוז";"ratio"->"ערך c";"discount","vat","tip"->"אחוז";"split"->"מספר אנשים";"compare"->"טקסט שני";"datediff"->"תאריך שני YYYY-MM-DD";"adddays"->"מספר ימים להוספה";"random"->"גבול עליון";"dice"->"מספר צדדים";"pixels","dp"->"DPI";"gcdlcm"->"מספר שני";"rounding"->"ספרות אחרי הנקודה (0–8)";"percentchange"->"ערך חדש";"workhours"->"שעת סיום HH:mm";else->"ערך שני"
 }
 
 private fun execute(t:PocketTool,a:String,b:String,c:Context):String {
@@ -413,7 +504,8 @@ private fun execute(t:PocketTool,a:String,b:String,c:Context):String {
         "energy"->{val v=n?:error("Joule");"קלוריות: "+(v/4.184).fmt()+"\nkWh: "+(v/3600000).fmt()+"\nWh: "+(v/3600).fmt()}
         "power"->{val v=n?:error("W");"kW: "+(v/1000).fmt()+"\nכוח סוס: "+(v/745.7).fmt()}
         "cooking"->{val v=n?:error("מ״ל");"כפיות: "+(v/5).fmt()+"\nכפות: "+(v/15).fmt()+"\nכוסות: "+(v/240).fmt()}
-        "pixels","dp"->{val px=n?:error("פיקסלים");val dpi=m?:c.resources.displayMetrics.densityDpi.toDouble();require(dpi>0); "DP: "+(px*160/dpi).fmt()+" לפי "+dpi+" DPI"}
+        "pixels"->{val px=n?:error("פיקסלים");val dpi=m?:c.resources.displayMetrics.densityDpi.toDouble();require(dpi>0); "DP: "+(px*160/dpi).fmt()+" לפי "+dpi+" DPI"}
+        "dp"->{val dp=n?:error("DP");val dpi=m?:c.resources.displayMetrics.densityDpi.toDouble();require(dpi>0); "פיקסלים: "+(dp*dpi/160).fmt()+" לפי "+dpi+" DPI"}
         "textcount"->"תווים: "+x.length+"\nללא רווחים: "+x.count{!it.isWhitespace()}+"\nמילים: "+x.trim().split(Regex("\\s+")).count{it.isNotEmpty()}+"\nשורות: "+x.lines().size+"\nBytes UTF-8: "+x.toByteArray().size
         "uppercase"->x.uppercase(Locale.ROOT)
         "lowercase"->x.lowercase(Locale.ROOT)
@@ -442,27 +534,42 @@ private fun execute(t:PocketTool,a:String,b:String,c:Context):String {
         "passcheck"->{val score=listOf(x.length>=12,x.any{it.isLowerCase()},x.any{it.isUpperCase()},x.any{it.isDigit()},x.any{!it.isLetterOrDigit()}).count{it};"חוזק: "+(when{score<=2->"חלשה";score<=4->"בינונית";else->"חזקה"})+" ("+score+"/5)\nאורך: "+x.length+" תווים"}
         "uuid"->UUID.randomUUID().toString()
         "passphrase"->{val words=listOf("ענן","כוכב","נהר","אור","אבן","יער","רוח","ים","שקד","ברק","חלון","שמש","מפתח","ספר","דרך","גשר","פרח","ירח","גל","צוק");List(x.toIntOrNull()?.coerceIn(3,8)?:4){words[rnd.nextInt(words.size)]}.joinToString("-")}
-        "random"->{val low=n?.toInt()?:error("גבול תחתון");val high=m?.toInt()?:error("גבול עליון");require(high>=low);rnd.nextInt(low,high+1).toString()}
+        "random"->{val low=n?.toLong()?:error("גבול תחתון");val high=m?.toLong()?:error("גבול עליון");require(high>=low&&low>=Int.MIN_VALUE&&high<Int.MAX_VALUE);val span=(high-low+1).toInt();(rnd.nextInt(span).toLong()+low).toString()}
         "dice"->{val count=(n?:1.0).toInt().coerceIn(1,100);val sides=(m?:6.0).toInt().coerceIn(2,1000);val rolls=List(count){rnd.nextInt(sides)+1};"תוצאות: "+rolls.joinToString(", ")+"\nסכום: "+rolls.sum()}
         "coin"->if(rnd.nextBoolean())"עץ" else "פלי"
-        "datediff"->{val d1=parseDate(x);val d2=parseDate(y);"הפרש: "+abs((d2.time-d1.time)/86400000L)+" ימים"}
-        "adddays"->{val d=parseDate(x);Date(d.time+(y.toLongOrNull()?:error("מספר ימים"))*86400000L).formatLocal()}
-        "weekday"->SimpleDateFormat("EEEE",Locale("he","IL")).format(parseDate(x))
+        "datediff"->{val d1=parseLocalDate(x);val d2=parseLocalDate(y);"הפרש: "+abs(java.time.temporal.ChronoUnit.DAYS.between(d1,d2))+" ימים"}
+        "adddays"->{val d=parseLocalDate(x);d.plusDays(y.toLongOrNull()?:error("מספר ימים")).format(DateTimeFormatter.ISO_LOCAL_DATE)}
+        "weekday"->parseLocalDate(x).format(DateTimeFormatter.ofPattern("EEEE",Locale("he","IL")))
+        "agecalc"->{val birth=parseLocalDate(x);val today=LocalDate.now();require(!birth.isAfter(today)){"תאריך הלידה לא יכול להיות בעתיד"};val age=Period.between(birth,today);"גיל: "+age.years+" שנים, "+age.months+" חודשים ו-"+age.days+" ימים"}
+        "workhours"->{val start=LocalTime.parse(x);val end=LocalTime.parse(y);var duration=Duration.between(start,end);if(duration.isNegative)duration=duration.plusDays(1);val mins=duration.toMinutes();"משך: "+(mins/60)+" שעות ו-"+(mins%60)+" דקות"}
+        "fuel"->{val v=n?:error("צריכת דלק");require(v>0);"ק״מ לליטר: "+(100/v).fmt()+"\nMPG (ארה״ב): "+(235.215/v).fmt()}
+        "hexrgb"->{val h=x.removePrefix("#");require(Regex("^[0-9A-Fa-f]{6}$").matches(h)){"הזן 6 ספרות HEX"};val value=h.toLong(16);"R: "+((value shr 16) and 255)+"\nG: "+((value shr 8) and 255)+"\nB: "+(value and 255)}
+        "rot13"->x.map{ch->when(ch){in 'a'..'z'->'a'+(ch-'a'+13)%26;in 'A'..'Z'->'A'+(ch-'A'+13)%26;else->ch}}.joinToString("")
+        "htmlencode"->x.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&#39;")
+        "emailcheck"->{val ok=Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$").matches(x);if(ok)"כתובת במבנה תקין" else "כתובת לא תקינה"}
+        "factorial"->{val v=x.toInt();require(v in 0..20){"הזן מספר בין 0 ל-20"};(1L..v.toLong()).fold(1L){acc,k->acc*k}.toString()}
+        "primecheck"->{val v=x.toLong();require(v>=0){"הזן מספר חיובי"};if(isPrime(v))"מספר ראשוני" else "אינו מספר ראשוני"}
+        "gcdlcm"->{val a1=x.toLong();val b1=y.toLong();require(a1!=Long.MIN_VALUE&&b1!=Long.MIN_VALUE);val g=gcdLong(kotlin.math.abs(a1),kotlin.math.abs(b1));val l=if(g==0L)0L else Math.multiplyExact(kotlin.math.abs(a1)/g,kotlin.math.abs(b1));"GCD: "+g+"\nLCM: "+l}
+        "rounding"->{val digits=(m?:error("מספר ספרות")).toInt();require(digits in 0..8);BigDecimal(x).setScale(digits,RoundingMode.HALF_UP).toPlainString()}
+        "percentchange"->{val old=n?:error("ערך קודם");val fresh=m?:error("ערך חדש");require(old!=0.0);val change=(fresh-old)/old*100;(if(change>0)"עלייה: " else if(change<0)"ירידה: " else "ללא שינוי: ")+abs(change).fmt()+"%"}
         "leap"->{val year=x.toInt();if(year%400==0||(year%4==0&&year%100!=0))"השנה מעוברת" else "השנה אינה מעוברת"}
         "yearday"->"יום מספר "+SimpleDateFormat("D",Locale.ROOT).format(parseDate(x))+" בשנה"
-        "unixtime"->{val v=x.toLongOrNull();if(v!=null)Date(if(v<10000000000L)v*1000 else v).formatLocal() else (parseDate(x).time/1000).toString()}
+        "unixtime"->{val v=x.toLongOrNull();if(v!=null){val instant=if(v<10000000000L)Instant.ofEpochSecond(v) else Instant.ofEpochMilli(v);DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss",Locale.ROOT).withZone(ZoneId.systemDefault()).format(instant)}else parseLocalDate(x).atStartOfDay(ZoneId.systemDefault()).toEpochSecond().toString()}
         "color"->{val c=x.split(",", ";").map{it.trim().toInt()};require(c.size==3&&c.all{it in 0..255});"#%02X%02X%02X".format(c[0],c[1],c[2])}
         "aspect"->{val p=x.lowercase().replace("×","x").split("x",",").map{it.trim().toInt()};require(p.size==2&&p.all{it>0});val g=gcd(p[0],p[1]);(p[0]/g).toString()+":"+(p[1]/g)}
         else->error("פעולה לא מוכרת")
     }
 }
 
+private fun parseLocalDate(s:String):LocalDate=try { LocalDate.parse(s,DateTimeFormatter.ISO_LOCAL_DATE) } catch(e:Exception) { throw IllegalArgumentException("תאריך לא תקין. השתמש בתבנית YYYY-MM-DD") }
+private fun isPrime(n:Long):Boolean { if(n<2)return false;if(n%2L==0L)return n==2L;var d=3L;while(d<=n/d){if(n%d==0L)return false;d+=2};return true }
+private fun gcdLong(a:Long,b:Long):Long=if(b==0L)a else gcdLong(b,a%b)
 private fun parseDate(s:String):Date{val f=SimpleDateFormat("yyyy-MM-dd",Locale.ROOT);f.isLenient=false;return f.parse(s)?:error("תאריך לא תקין YYYY-MM-DD")}
 private fun Date.formatLocal()=SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.ROOT).format(this)
 private fun Double.fmt():String{require(isFinite());return if(abs(this-roundToLong())<1e-7&&abs(this)<9e15)roundToLong().toString() else String.format(Locale.ROOT,"%.6f",this).trimEnd('0').trimEnd('.')}
 private fun gcd(a:Int,b:Int):Int=if(b==0)abs(a) else gcd(b,a%b)
 private fun toRoman(n0:Int):String{var n=n0;val items=listOf(1000 to "M",900 to "CM",500 to "D",400 to "CD",100 to "C",90 to "XC",50 to "L",40 to "XL",10 to "X",9 to "IX",5 to "V",4 to "IV",1 to "I");return buildString{items.forEach{(v,s)->while(n>=v){append(s);n-=v}}}}
-private fun romanToInt(s:String):Int{val m=mapOf('I' to 1,'V' to 5,'X' to 10,'L' to 50,'C' to 100,'D' to 500,'M' to 1000);var total=0;for(i in s.indices){val v=m[s[i].uppercaseChar()]?:error("תו רומי לא תקין");total+=if(i+1<s.length&&v<(m[s[i+1].uppercaseChar()]?:0))-v else v};return total}
+private fun romanToInt(s:String):Int{val normalized=s.trim().uppercase(Locale.ROOT);require(normalized.isNotEmpty()){"הזן מספר רומי"};val m=mapOf('I' to 1,'V' to 5,'X' to 10,'L' to 50,'C' to 100,'D' to 500,'M' to 1000);var total=0;for(i in normalized.indices){val v=m[normalized[i]]?:error("תו רומי לא תקין");total+=if(i+1<normalized.length&&v<(m[normalized[i+1]]?:0))-v else v};require(total in 1..3999&&toRoman(total)==normalized){"מספר רומי לא תקין"};return total}
 private fun clock(s:Long)="%02d:%02d:%02d".format(s/3600,(s%3600)/60,s%60)
 private fun batteryInfo(c:Context):String{val i=c.registerReceiver(null,android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));val l=i?.getIntExtra(BatteryManager.EXTRA_LEVEL,-1)?:-1;val scale=i?.getIntExtra(BatteryManager.EXTRA_SCALE,100)?:100;val status=i?.getIntExtra(BatteryManager.EXTRA_STATUS,-1)?:-1;val state=when(status){BatteryManager.BATTERY_STATUS_CHARGING->"בטעינה";BatteryManager.BATTERY_STATUS_FULL->"מלאה";BatteryManager.BATTERY_STATUS_DISCHARGING->"לא בטעינה";else->"לא ידוע"};return "טעינה: "+(if(l>=0)l*100/scale else -1)+"%\nמצב: "+state}
 private fun storageInfo():String{val s=StatFs(Environment.getDataDirectory().path);val total=s.totalBytes/1024/1024/1024;val free=s.availableBytes/1024/1024/1024;return "נפח כולל: "+total+" GB\nפנוי: "+free+" GB\nבשימוש: "+(total-free)+" GB"}
