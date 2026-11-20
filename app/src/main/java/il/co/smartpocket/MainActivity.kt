@@ -534,7 +534,7 @@ private fun execute(t:PocketTool,a:String,b:String,c:Context):String {
         "passcheck"->{val score=listOf(x.length>=12,x.any{it.isLowerCase()},x.any{it.isUpperCase()},x.any{it.isDigit()},x.any{!it.isLetterOrDigit()}).count{it};"חוזק: "+(when{score<=2->"חלשה";score<=4->"בינונית";else->"חזקה"})+" ("+score+"/5)\nאורך: "+x.length+" תווים"}
         "uuid"->UUID.randomUUID().toString()
         "passphrase"->{val words=listOf("ענן","כוכב","נהר","אור","אבן","יער","רוח","ים","שקד","ברק","חלון","שמש","מפתח","ספר","דרך","גשר","פרח","ירח","גל","צוק");List(x.toIntOrNull()?.coerceIn(3,8)?:4){words[rnd.nextInt(words.size)]}.joinToString("-")}
-        "random"->{val low=n?.toLong()?:error("גבול תחתון");val high=m?.toLong()?:error("גבול עליון");require(high>=low&&low>=Int.MIN_VALUE&&high<Int.MAX_VALUE);val span=(high-low+1).toInt();(rnd.nextInt(span).toLong()+low).toString()}
+        "random"->{val low=n?.toLong()?:error("גבול תחתון");val high=m?.toLong()?:error("גבול עליון");require(high>=low&&low>=Int.MIN_VALUE&&high<Int.MAX_VALUE&&high-low<Int.MAX_VALUE.toLong());val span=(high-low+1).toInt();(rnd.nextInt(span).toLong()+low).toString()}
         "dice"->{val count=(n?:1.0).toInt().coerceIn(1,100);val sides=(m?:6.0).toInt().coerceIn(2,1000);val rolls=List(count){rnd.nextInt(sides)+1};"תוצאות: "+rolls.joinToString(", ")+"\nסכום: "+rolls.sum()}
         "coin"->if(rnd.nextBoolean())"עץ" else "פלי"
         "datediff"->{val d1=parseLocalDate(x);val d2=parseLocalDate(y);"הפרש: "+abs(java.time.temporal.ChronoUnit.DAYS.between(d1,d2))+" ימים"}
@@ -546,7 +546,7 @@ private fun execute(t:PocketTool,a:String,b:String,c:Context):String {
         "hexrgb"->{val h=x.removePrefix("#");require(Regex("^[0-9A-Fa-f]{6}$").matches(h)){"הזן 6 ספרות HEX"};val value=h.toLong(16);"R: "+((value shr 16) and 255)+"\nG: "+((value shr 8) and 255)+"\nB: "+(value and 255)}
         "rot13"->x.map{ch->when(ch){in 'a'..'z'->'a'+(ch-'a'+13)%26;in 'A'..'Z'->'A'+(ch-'A'+13)%26;else->ch}}.joinToString("")
         "htmlencode"->x.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace("\"","&quot;").replace("'","&#39;")
-        "emailcheck"->{val ok=Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\\\.[A-Za-z]{2,}$").matches(x);if(ok)"כתובת במבנה תקין" else "כתובת לא תקינה"}
+        "emailcheck"->{val ok=Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$").matches(x);if(ok)"כתובת במבנה תקין" else "כתובת לא תקינה"}
         "factorial"->{val v=x.toInt();require(v in 0..20){"הזן מספר בין 0 ל-20"};(1L..v.toLong()).fold(1L){acc,k->acc*k}.toString()}
         "primecheck"->{val v=x.toLong();require(v>=0){"הזן מספר חיובי"};if(isPrime(v))"מספר ראשוני" else "אינו מספר ראשוני"}
         "gcdlcm"->{val a1=x.toLong();val b1=y.toLong();require(a1!=Long.MIN_VALUE&&b1!=Long.MIN_VALUE);val g=gcdLong(kotlin.math.abs(a1),kotlin.math.abs(b1));val l=if(g==0L)0L else Math.multiplyExact(kotlin.math.abs(a1)/g,kotlin.math.abs(b1));"GCD: "+g+"\nLCM: "+l}
