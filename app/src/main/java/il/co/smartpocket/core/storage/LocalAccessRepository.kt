@@ -4,6 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.provider.DocumentsContract
+
+data class LocalFileEntry(
+    val name: String,
+    val mimeType: String?,
+    val sizeBytes: Long,
+    val isDirectory: Boolean,
+    val uri: Uri
+)
 
 /**
  * Stores only user-selected SAF access. No broad storage permission is requested.
@@ -47,6 +56,41 @@ object LocalAccessRepository {
         val value = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(key, null) ?: return null
         return runCatching { Uri.parse(value) }.getOrNull()
+    }
+
+    fun listChildren(context: Context, treeUri: Uri): List<LocalFileEntry> {
+        return runCatching {
+            val documentId = DocumentsContract.getTreeDocumentId(treeUri)
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
+            val projection = arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+                DocumentsContract.Document.COLUMN_SIZE
+            )
+            val results = mutableListOf<LocalFileEntry>()
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                val idColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                val sizeColumn = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                while (cursor.moveToNext()) {
+                    val childId = cursor.getString(idColumn) ?: continue
+                    val name = if (nameColumn >= 0) cursor.getString(nameColumn) else null
+                    val mime = if (mimeColumn >= 0) cursor.getString(mimeColumn) else null
+                    val size = if (sizeColumn >= 0 && !cursor.isNull(sizeColumn)) cursor.getLong(sizeColumn) else 0L
+                    val childUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                    results += LocalFileEntry(
+                        name = name ?: "ללא שם",
+                        mimeType = mime,
+                        sizeBytes = size,
+                        isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
+                        uri = childUri
+                    )
+                }
+            }
+            results.sortedWith(compareBy<LocalFileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+        }.getOrElse { emptyList() }
     }
 
     fun displayName(context: Context, uri: Uri): String {

@@ -3,6 +3,8 @@
 package il.co.smartpocket
 
 import android.net.Uri
+import android.content.Intent
+import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -55,6 +57,7 @@ import il.co.smartpocket.core.catalog.MegaModule
 import il.co.smartpocket.core.catalog.MegaModuleCatalog
 import il.co.smartpocket.core.catalog.ModuleStage
 import il.co.smartpocket.core.storage.LocalAccessRepository
+import il.co.smartpocket.core.storage.LocalFileEntry
 
 private val MegaBackground = Color(0xFF080F1C)
 private val MegaSurface = Color(0xFF111D2E)
@@ -80,6 +83,23 @@ fun MegaPocketXApp() {
             ?.lastPathSegment?.substringAfterLast(':')?.takeIf { it.isNotBlank() } ?: "טרם נבחרה תיקייה")
     }
     var accessMessage by remember { mutableStateOf<String?>(null) }
+    var storageEntries by remember {
+        mutableStateOf(
+            LocalAccessRepository.readUri(context, "storage_tree_uri")
+                ?.let { LocalAccessRepository.listChildren(context, it) } ?: emptyList()
+        )
+    }
+    var audioTitle by remember { mutableStateOf<String?>(null) }
+    var audioPlaying by remember { mutableStateOf(false) }
+    var audioPreparing by remember { mutableStateOf(false) }
+    var audioPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            runCatching { audioPlayer?.release() }
+            audioPlayer = null
+        }
+    }
 
     val modelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -99,9 +119,44 @@ fun MegaPocketXApp() {
                 LocalAccessRepository.saveUri(context, "storage_tree_uri", uri)
                 storageName = uri.lastPathSegment?.substringAfterLast(':')?.takeIf { it.isNotBlank() }
                     ?: "תיקייה נבחרה"
-                accessMessage = "נשמרה הרשאה לתיקייה שבחרת. הגישה מוגבלת לתיקייה זו."
+                storageEntries = LocalAccessRepository.listChildren(context, uri)
+                accessMessage = "נשמרה הרשאה לתיקייה שבחרת. נמצאו ${storageEntries.size} פריטים."
             } else {
                 accessMessage = "לא ניתן לשמור הרשאה לתיקייה שנבחרה."
+            }
+        }
+    }
+
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                LocalAccessRepository.persistReadAccess(context, uri)
+                audioPlayer?.release()
+                val player = MediaPlayer()
+                audioPlayer = player
+                audioPreparing = true
+                audioPlaying = false
+                audioTitle = LocalAccessRepository.displayName(context, uri)
+                player.setDataSource(context, uri)
+                player.setOnPreparedListener { prepared ->
+                    audioPreparing = false
+                    prepared.start()
+                    audioPlaying = true
+                }
+                player.setOnCompletionListener {
+                    audioPlaying = false
+                }
+                player.setOnErrorListener { _, _, _ ->
+                    audioPreparing = false
+                    audioPlaying = false
+                    accessMessage = "לא ניתן לנגן את הקובץ הזה במכשיר."
+                    true
+                }
+                player.prepareAsync()
+            }.onFailure {
+                audioPreparing = false
+                audioPlaying = false
+                accessMessage = "פתיחת קובץ השמע נכשלה: ${it.message ?: "שגיאה לא ידועה"}"
             }
         }
     }
@@ -154,10 +209,53 @@ fun MegaPocketXApp() {
                         module = selectedModule,
                         modelName = modelName,
                         storageName = storageName,
+                        storageEntries = storageEntries,
+                        audioTitle = audioTitle,
+                        audioPlaying = audioPlaying,
+                        audioPreparing = audioPreparing,
                         message = accessMessage,
                         onBack = { selectedModuleId = null; accessMessage = null },
                         onPickModel = { modelPicker.launch(arrayOf("*/*")) },
                         onPickStorage = { storagePicker.launch(null) },
+                        onRefreshStorage = {
+                            val selectedTree = LocalAccessRepository.readUri(context, "storage_tree_uri")
+                            storageEntries = selectedTree?.let { LocalAccessRepository.listChildren(context, it) } ?: emptyList()
+                            accessMessage = "הסריקה הסתיימה. נמצאו ${storageEntries.size} פריטים."
+                        },
+                        onOpenFile = { entry ->
+                            if (!entry.isDirectory) {
+                                try {
+                                    val viewIntent = Intent(Intent.ACTION_VIEW)
+                                        .setDataAndType(entry.uri, entry.mimeType ?: "*/*")
+                                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    context.startActivity(Intent.createChooser(viewIntent, "פתיחת קובץ"))
+                                } catch (_: Exception) {
+                                    accessMessage = "אין אפליקציה מתאימה לפתיחת הקובץ הזה."
+                                }
+                            }
+                        },
+                        onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
+                        onToggleAudio = {
+                            runCatching {
+                                val player = audioPlayer
+                                if (player != null) {
+                                    if (player.isPlaying) {
+                                        player.pause()
+                                        audioPlaying = false
+                                    } else {
+                                        player.start()
+                                        audioPlaying = true
+                                    }
+                                }
+                            }.onFailure { accessMessage = "לא ניתן לשנות את מצב הניגון." }
+                        },
+                        onStopAudio = {
+                            runCatching { audioPlayer?.stop() }
+                            runCatching { audioPlayer?.release() }
+                            audioPlayer = null
+                            audioPlaying = false
+                            audioPreparing = false
+                        },
                         onOpenLegacy = { showLegacyTools = true }
                     )
                     activeTab == "settings" -> SettingsScreen()
@@ -360,10 +458,19 @@ private fun ModuleDetailsScreen(
     module: MegaModule,
     modelName: String?,
     storageName: String,
+    storageEntries: List<LocalFileEntry>,
+    audioTitle: String?,
+    audioPlaying: Boolean,
+    audioPreparing: Boolean,
     message: String?,
     onBack: () -> Unit,
     onPickModel: () -> Unit,
     onPickStorage: () -> Unit,
+    onRefreshStorage: () -> Unit,
+    onOpenFile: (LocalFileEntry) -> Unit,
+    onPickAudio: () -> Unit,
+    onToggleAudio: () -> Unit,
+    onStopAudio: () -> Unit,
     onOpenLegacy: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -409,8 +516,63 @@ private fun ModuleDetailsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = MegaCyan, contentColor = MegaBackground)) {
                     Text("בחירת תיקייה ב-SD או USB")
                 }
-                Text("הגישה ניתנת רק לתיקייה שבוחרים דרך Android. אין בקשה להרשאת גישה גורפת לכל האחסון.",
+                Button(onClick = onRefreshStorage, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MegaSurfaceAlt, contentColor = MegaText)) {
+                    Text("סריקת התיקייה ורענון")
+                }
+                Text("נמצאו ${storageEntries.size} פריטים", color = MegaCyan, fontWeight = FontWeight.Bold)
+                if (storageEntries.isEmpty()) {
+                    Text("אין פריטים להצגה או שעדיין לא נבחרה תיקייה.", color = MegaMuted, fontSize = 12.sp)
+                } else {
+                    storageEntries.take(60).forEach { entry ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().then(
+                                if (entry.isDirectory) Modifier else Modifier.clickable { onOpenFile(entry) }
+                            ),
+                            color = MegaSurface,
+                            shape = RoundedCornerShape(13.dp)
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(if (entry.isDirectory) "📁" else "📄", fontSize = 20.sp)
+                                Column(Modifier.weight(1f)) {
+                                    Text(entry.name, color = MegaText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(if (entry.isDirectory) "תיקייה" else entry.mimeType ?: "קובץ",
+                                        color = MegaMuted, fontSize = 10.sp)
+                                }
+                                if (!entry.isDirectory) Text("פתיחה", color = MegaCyan, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+                Text("הגישה מוגבלת לתיקייה שבוחרים דרך Android. אין הרשאת אחסון גורפת; פתיחת קובץ מועברת לאפליקציה מקומית תואמת.",
                     color = MegaMuted, fontSize = 12.sp)
+            }
+            "media" -> {
+                Text("נגן שמע מקומי", color = MegaText, fontWeight = FontWeight.Bold)
+                Text(audioTitle ?: "לא נבחר קובץ שמע", color = MegaMuted, fontSize = 13.sp)
+                Button(onClick = onPickAudio, modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MegaCyan, contentColor = MegaBackground)) {
+                    Text("בחירת קובץ שמע מהמכשיר / SD / USB")
+                }
+                if (audioPreparing) {
+                    Text("מכין את הנגן…", color = MegaCyan, fontSize = 12.sp)
+                } else if (audioTitle != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onToggleAudio, modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = MegaSurfaceAlt, contentColor = MegaText)) {
+                            Text(if (audioPlaying) "השהיה" else "המשך ניגון")
+                        }
+                        Button(onClick = onStopAudio, modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF592F40), contentColor = MegaText)) {
+                            Text("עצירה")
+                        }
+                    }
+                    Text("הניגון מתבצע במכשיר בלבד, ללא סטרימינג וללא אינטרנט.", color = MegaMuted, fontSize = 12.sp)
+                }
             }
             else -> Text("המודול יפותח בהמשך לפי מפת הדרכים של MEGA POCKET X.", color = MegaMuted, fontSize = 13.sp)
         }
