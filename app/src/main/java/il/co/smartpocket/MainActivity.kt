@@ -176,16 +176,16 @@ private val allTools = rawTools.trim().lines().map { line ->
 class MainActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor=android.graphics.Color.rgb(243,246,251)
-        window.navigationBarColor=android.graphics.Color.rgb(243,246,251)
-        window.decorView.systemUiVisibility=android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        setContent { SmartPocketApp() }
+        window.statusBarColor=android.graphics.Color.rgb(8,15,28)
+        window.navigationBarColor=android.graphics.Color.rgb(17,29,46)
+        window.decorView.systemUiVisibility=0
+        setContent { MegaPocketXApp() }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SmartPocketApp() {
+fun SmartPocketApp(onBack: (() -> Unit)? = null) {
     val context=LocalContext.current
     val prefs=remember { context.getSharedPreferences("smart_pocket",Context.MODE_PRIVATE) }
     var selected by remember { mutableStateOf<PocketTool?>(null) }
@@ -214,6 +214,7 @@ private fun SmartPocketApp() {
                 containerColor=Bg,
                 topBar={
                     TopAppBar(
+                        navigationIcon={ if(onBack!=null) IconButton(onClick=onBack){Text("←",fontSize=22.sp,color=Ink)} },
                         title={Column { Text("כיס חכם",fontWeight=FontWeight.ExtraBold,color=Ink);Text("ארגז כלים אישי • עובד ללא אינטרנט",style=MaterialTheme.typography.labelSmall,color=Muted) }},
                         actions={IconButton(onClick={favoritesOnly=!favoritesOnly}){Text(if(favoritesOnly)"★" else "☆",fontSize=24.sp,color=Brand)}},
                         colors=TopAppBarDefaults.topAppBarColors(containerColor=Bg)
