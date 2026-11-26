@@ -94,7 +94,7 @@ fun MegaPocketXApp() {
         "amber" -> Color(0xFFFFC66D)
         else -> MegaCyan
     }
-    val scaledDensity = LocalDensity.current.copy(fontScale = textScale)
+    val scaledDensity = androidx.compose.ui.unit.Density(LocalDensity.current.density, textScale)
     var selectedModuleId by remember { mutableStateOf<String?>(null) }
     var showLegacyTools by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
