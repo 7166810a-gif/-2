@@ -12,8 +12,8 @@ android {
         applicationId = "il.co.smartpocket"
         minSdk = 26
         targetSdk = 33
-        versionCode = 3
-        versionName = "2.1.0"
+        versionCode = 4
+        versionName = "2.2.0"
     }
 
     compileOptions {
