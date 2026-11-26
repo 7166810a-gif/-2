@@ -1,4 +1,4 @@
-name: Build Smart Pocket APK
+name: Build MEGA POCKET X APK
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: smart-pocket-apk-${{ github.ref }}
+  group: mega-pocket-x-apk-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -32,10 +32,14 @@ jobs:
           gradle-version: '8.9'
       - name: Build APK
         run: gradle --no-daemon clean assembleDebug
-      - name: Upload APK
+      - name: Verify APK exists and calculate checksum
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartPocket-offline-debug-apk
+          name: MEGA-POCKET-X-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
